@@ -34,10 +34,19 @@ class CommentUpdate(BaseModel):
         return _clean_content(value)
 
 
+class CommentAuthor(BaseModel):
+    id: UUID
+    username: str
+    full_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class CommentResponse(BaseModel):
     id: UUID
     post_id: UUID
     author_id: UUID
+    author: Optional[CommentAuthor] = None
     content: str
     created_at: datetime
     updated_at: datetime

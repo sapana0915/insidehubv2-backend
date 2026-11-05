@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.exceptions import NotFoundException
 from app.posts.models import Post
@@ -27,7 +27,7 @@ class CommentService:
         request: Any = None,
         viewset: Any = None,
     ) -> list:
-        query = db.query(Comment)
+        query = db.query(Comment).options(selectinload(Comment.author))
         if filters:
             query = filters.apply(query, Comment)
         if viewset and viewset.scope_list_to_owner(request):

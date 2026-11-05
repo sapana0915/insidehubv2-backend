@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.exceptions import NotFoundException
 
@@ -10,7 +10,12 @@ from .models import Comment
 class CommentRepository:
     @staticmethod
     def get_by_id(db: Session, comment_id: UUID) -> Comment:
-        comment = db.query(Comment).filter(Comment.id == comment_id).first()
+        comment = (
+            db.query(Comment)
+            .options(selectinload(Comment.author))
+            .filter(Comment.id == comment_id)
+            .first()
+        )
         if not comment:
             raise NotFoundException("Comment")
         return comment
@@ -29,14 +34,12 @@ class CommentRepository:
     def create(db: Session, comment: Comment) -> Comment:
         db.add(comment)
         db.commit()
-        db.refresh(comment)
-        return comment
+        return CommentRepository.get_by_id(db, comment.id)
 
     @staticmethod
     def update(db: Session, comment: Comment) -> Comment:
         db.commit()
-        db.refresh(comment)
-        return comment
+        return CommentRepository.get_by_id(db, comment.id)
 
     @staticmethod
     def delete(db: Session, comment_id: UUID) -> None:
