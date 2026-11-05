@@ -3,7 +3,10 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session, selectinload
 
-from .models import Post, PostImage
+from app.core.exceptions import ValidationException
+
+from .constants import PHOTOGRAPHY_SLUG
+from .models import Post
 from .repositories import PostRepository
 from .schemas import PostCreate, PostUpdate
 
@@ -45,26 +48,50 @@ class PostService:
             author_id=post_data.author_id,
         )
         if post_data.images:
-            for url in post_data.images:
-                post.images.append(
-                    PostImage(image_url=url, user_id=post_data.author_id)
-                )
+            PostRepository.replace_images(
+                db,
+                post,
+                post_data.images,
+                post_data.author_id,
+                keep_places=post_data.category == PHOTOGRAPHY_SLUG,
+            )
         return PostRepository.create(db, post)
 
     @staticmethod
     def update(db: Session, post_id: UUID, post_data: PostUpdate) -> Post:
         post = PostRepository.get_by_id(db, post_id)
+        category = post_data.category if post_data.category is not None else post.category
 
-        if post_data.title is not None:
-            post.title = post_data.title
-        if post_data.content is not None:
-            post.content = post_data.content
-        if post_data.category is not None:
-            post.category = post_data.category
+        if category == PHOTOGRAPHY_SLUG:
+            if post_data.images is not None and len(post_data.images) == 0:
+                raise ValidationException("Photography posts need at least one photo.")
+            if post_data.images is None and len(post.images) == 0:
+                raise ValidationException("Photography posts need at least one photo.")
+            post.title = ""
+            post.content = ""
+            post.category = category
+            if post_data.images is not None:
+                PostRepository.replace_images(
+                    db, post, post_data.images, post.author_id, keep_places=True
+                )
+            return PostRepository.update(db, post)
+
+        title = post.title if post_data.title is None else post_data.title
+        content = post.content if post_data.content is None else post_data.content
+        title = title.strip()
+        content = content.strip()
+        if not title or not content:
+            raise ValidationException("Every entry needs a title and a story.")
+        post.title = title
+        post.content = content
+        post.category = category
         if post_data.images is not None:
             PostRepository.replace_images(
-                db, post, post_data.images, post.author_id
+                db, post, post_data.images, post.author_id, keep_places=False
             )
+        else:
+            for image in post.images:
+                image.place_name = None
 
         return PostRepository.update(db, post)
 

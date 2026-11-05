@@ -74,6 +74,19 @@ class Settings(BaseSettings):
     MEDIA_URL: str = "/media"
     MAX_UPLOAD_BYTES: int = 5 * 1024 * 1024
 
+    # "console" prints the code in the logs; "smtp" sends a real email.
+    EMAIL_BACKEND: Literal["console", "smtp"] = "smtp"
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_USE_TLS: bool = True
+    EMAIL_FROM: str = "InsideHub <no-reply@insidehub.local>"
+
+    OTP_EXPIRE_MINUTES: int = 10
+    OTP_MAX_ATTEMPTS: int = 5
+    OTP_RESEND_COOLDOWN_SECONDS: int = 60
+
     def __init__(self, **kwargs: Any) -> None:
         block = _env_block()
         merged: Dict[str, Any] = {}
