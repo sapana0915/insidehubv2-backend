@@ -8,6 +8,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.users.models import User
+    from app.comments.models import Comment
 
 
 class Post(Base):
@@ -31,6 +32,11 @@ class Post(Base):
     images: Mapped[list["PostImage"]] = relationship(
         back_populates="post",
         cascade="all, delete-orphan",
+    )
+    comments: Mapped[list["Comment"]] = relationship(
+        back_populates="post",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     author: Mapped["User"] = relationship(back_populates="posts")
 

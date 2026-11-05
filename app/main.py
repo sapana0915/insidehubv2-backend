@@ -7,6 +7,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.comments.routers import router as comments_router
+from app.comments.views import CommentViewSet
 from app.core.config import settings
 from app.database import get_db
 from app.middleware.error_handler import setup_exception_handlers
@@ -35,8 +37,10 @@ setup_exception_handlers(app)
 # are matched before the viewsets' /{id} routes.
 app.include_router(users_router, prefix=settings.API_V1_STR)
 app.include_router(posts_router, prefix=settings.API_V1_STR)
+app.include_router(comments_router, prefix=settings.API_V1_STR)
 app.include_router(UserViewSet().router, prefix=f"{settings.API_V1_STR}/users")
 app.include_router(PostViewSet().router, prefix=f"{settings.API_V1_STR}/posts")
+app.include_router(CommentViewSet().router, prefix=f"{settings.API_V1_STR}/comments")
 
 Path(settings.MEDIA_DIR).mkdir(parents=True, exist_ok=True)
 app.mount(settings.MEDIA_URL, StaticFiles(directory=settings.MEDIA_DIR), name="media")
