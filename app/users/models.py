@@ -29,6 +29,9 @@ class User(Base):
         back_populates="author",
         cascade="all, delete-orphan",
     )
+    likes = relationship("PostLike", back_populates="author",
+                         cascade="all, delete-orphan")
+    comment_likes = relationship("CommentLike", back_populates="author", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User {self.username}>"

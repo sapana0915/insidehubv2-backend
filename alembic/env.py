@@ -10,6 +10,8 @@ from app.database import Base
 from app.users.models import EmailVerification, User  # noqa: F401
 from app.posts.models import Post, PostImage  # noqa: F401
 from app.comments.models import Comment  # noqa: F401
+from app.likes.models import PostLike # noqa: F401
+from app.likes.models import CommentLike # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

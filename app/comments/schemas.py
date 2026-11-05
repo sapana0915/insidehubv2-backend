@@ -48,6 +48,8 @@ class CommentResponse(BaseModel):
     author_id: UUID
     author: Optional[CommentAuthor] = None
     content: str
+    like_count: int = 0
+    liked: bool = False
     created_at: datetime
     updated_at: datetime
 

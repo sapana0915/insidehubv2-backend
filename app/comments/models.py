@@ -6,9 +6,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
+
 if TYPE_CHECKING:
     from app.users.models import User
     from app.posts.models import Post
+    from app.likes.models import CommentLike
 
 
 class Comment(Base):
@@ -34,3 +36,8 @@ class Comment(Base):
     )
     post: Mapped["Post"] = relationship(back_populates="comments")
     author: Mapped["User"] = relationship(back_populates="comments")
+    likes: Mapped[list["CommentLike"]] = relationship(
+        back_populates="comment",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

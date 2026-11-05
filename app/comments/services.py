@@ -1,6 +1,7 @@
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.exceptions import NotFoundException
@@ -9,6 +10,7 @@ from app.posts.models import Post
 from .models import Comment
 from .repositories import CommentRepository
 from .schemas import CommentCreate, CommentUpdate
+from app.likes.models import CommentLike
 
 
 class CommentService:
@@ -35,7 +37,32 @@ class CommentService:
             uid = viewset._get_user_id(request)
             query = query.filter(column == uid)
         query = query.order_by(Comment.created_at.asc(), Comment.id)
-        return query.offset(skip).limit(limit).all()
+        comments = query.offset(skip).limit(limit).all()
+
+        ids = [comment.id for comment in comments]
+        counts = {}
+        liked_ids = set()
+        if ids:
+            counts = dict(
+                db.query(CommentLike.comment_id, func.count(CommentLike.id))
+                .filter(CommentLike.comment_id.in_(ids))
+                .group_by(CommentLike.comment_id)
+                .all()
+            )
+            if request is not None and request.is_authenticated:
+                liked_ids = {
+                    row[0]
+                    for row in db.query(CommentLike.comment_id)
+                    .filter(
+                        CommentLike.comment_id.in_(ids),
+                        CommentLike.author_id == request.get_user_id(),
+                    )
+                    .all()
+                }
+        for comment in comments:
+            comment.like_count = counts.get(comment.id, 0)
+            comment.liked = comment.id in liked_ids
+        return comments
 
     @staticmethod
     def create(db: Session, comment_data: CommentCreate) -> Comment:
