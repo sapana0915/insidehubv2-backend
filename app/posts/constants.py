@@ -37,6 +37,11 @@ CATEGORIES: List[Dict[str, str]] = [
         "description": "Gear, tools and notes from the digital road.",
     },
     {
+        "slug": "art",
+        "name": "Art",
+        "description": "Paintings, sketches, crafts and creative work from the road.",
+    },
+    {
         "slug": "other",
         "name": "Other",
         "description": "Everything that doesn't fit a box.",
