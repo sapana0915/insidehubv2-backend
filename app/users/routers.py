@@ -4,37 +4,75 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.constants import UserRole
+from app.core.exceptions import ConflictException
 from app.core.security import create_access_token
 from app.database import get_db
 from app.middleware.request import RequestWrapper, get_request_wrapper
 from app.posts.models import Post
-from .schemas import PublicUserResponse, Token, UserCreate, UserLogin, UserResponse, UserUpdate
+from .otp import consume_code, issue_code
+from .repositories import UserRepository
+from .schemas import (
+    PublicUserResponse,
+    SendCodeRequest,
+    SendCodeResponse,
+    Token,
+    UserCreate,
+    UserLogin,
+    UserResponse,
+    UserUpdate,
+)
 from .services import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.post("/register", response_model=UserResponse)
+def _token_for(user) -> dict:
+    role = UserRole.ADMIN.value if user.is_admin else UserRole.USER.value
+    return {
+        "access_token": create_access_token(
+            data={
+                "sub": str(user.id),
+                "user_id": str(user.id),
+                "email": user.email,
+                "role": role,
+            },
+        ),
+        "token_type": "bearer",
+    }
+
+
+@router.post("/register/send-code", response_model=SendCodeResponse)
+def send_register_code(data: SendCodeRequest, db: Session = Depends(get_db)):
+    """Email a 6-digit code. No account is created yet."""
+    email = data.email.lower()
+    if UserRepository.get_by_email(db, email):
+        raise ConflictException("Email already registered")
+    if UserRepository.get_by_username(db, data.username):
+        raise ConflictException("Username already taken")
+    issue_code(db, email)
+    return {
+        "message": "Verification code sent",
+        "expires_in": settings.OTP_EXPIRE_MINUTES * 60,
+        "resend_in": settings.OTP_RESEND_COOLDOWN_SECONDS,
+    }
+
+
+@router.post("/register", response_model=Token)
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
-    """Register a new user."""
-    return UserService.create(db, user_data)
+    """Create the account once the emailed code is correct, and sign the user in."""
+    email = user_data.email.lower()
+    consume_code(db, email, user_data.code)
+    user = UserService.create(db, user_data.model_copy(update={"email": email}))
+    return _token_for(user)
 
 
 @router.post("/login", response_model=Token)
 def login(credentials: UserLogin, db: Session = Depends(get_db)):
     """Login user and get access token."""
     user = UserService.authenticate(db, credentials.email, credentials.password)
-    role = UserRole.ADMIN.value if user.is_admin else UserRole.USER.value
-    access_token = create_access_token(
-        data={
-            "sub": str(user.id),
-            "user_id": str(user.id),
-            "email": user.email,
-            "role": role,
-        },
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return _token_for(user)
 
 
 @router.get("/me", response_model=UserResponse)

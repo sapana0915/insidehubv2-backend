@@ -54,11 +54,24 @@ class PostRepository:
     def replace_images(
         db: Session,
         post: Post,
-        image_urls: list[str],
+        images: list,
         user_id: UUID,
+        *,
+        keep_places: bool = False,
     ) -> None:
         post.images.clear()
-        for url in image_urls:
+        for index, item in enumerate(images):
+            if isinstance(item, str):
+                url = item
+                place_name = None
+            else:
+                url = item.url
+                place_name = item.place_name if keep_places else None
             post.images.append(
-                PostImage(image_url=url, user_id=user_id)
+                PostImage(
+                    image_url=url,
+                    place_name=place_name,
+                    position=index,
+                    user_id=user_id,
+                )
             )

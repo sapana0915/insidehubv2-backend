@@ -9,7 +9,7 @@ CATEGORIES: List[Dict[str, str]] = [
     {
         "slug": "photography",
         "name": "Photography",
-        "description": "Frames worth a thousand words.",
+        "description": "Photographs only. A place name on each photo is optional.",
     },
     {
         "slug": "food",
@@ -44,3 +44,4 @@ CATEGORIES: List[Dict[str, str]] = [
 ]
 
 CATEGORY_SLUGS = {c["slug"] for c in CATEGORIES}
+PHOTOGRAPHY_SLUG = "photography"

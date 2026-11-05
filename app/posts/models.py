@@ -1,7 +1,7 @@
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, Text, Uuid
+from sqlalchemy import ForeignKey, Integer, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -32,6 +32,12 @@ class Post(Base):
     images: Mapped[list["PostImage"]] = relationship(
         back_populates="post",
         cascade="all, delete-orphan",
+        order_by="PostImage.position",
+    )
+    comments: Mapped[list["Comment"]] = relationship(
+        back_populates="post",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     comments: Mapped[list["Comment"]] = relationship(
         back_populates="post",
@@ -55,6 +61,8 @@ class PostImage(Base):
         nullable=False,
     )
     image_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    place_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),

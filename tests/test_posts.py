@@ -2,14 +2,39 @@ import uuid
 
 
 def _register_and_login(client):
+    from datetime import datetime, timedelta, timezone
+
+    from app.users.models import EmailVerification
+    from app.users.otp import _hash_code
+    from tests.conftest import TestingSessionLocal
+
     suffix = uuid.uuid4().hex[:8]
     email = f"writer_{suffix}@example.com"
-    client.post(
-        "/api/v1/users/register",
-        json={"email": email, "username": f"writer_{suffix}", "password": "password123"},
-    )
+    now = datetime.now(timezone.utc)
+    db = TestingSessionLocal()
+    try:
+        db.add(
+            EmailVerification(
+                email=email,
+                code_hash=_hash_code("123456"),
+                expires_at=now + timedelta(minutes=10),
+                attempts=0,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
     token = client.post(
-        "/api/v1/users/login", json={"email": email, "password": "password123"}
+        "/api/v1/users/register",
+        json={
+            "email": email,
+            "username": f"writer_{suffix}",
+            "password": "password123",
+            "code": "123456",
+        },
     ).json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -103,6 +128,39 @@ def test_users_cannot_edit_other_users(client):
     bob_id = client.get("/api/v1/users/me", headers=bob).json()["id"]
     response = client.patch(f"/api/v1/users/{bob_id}", json={"full_name": "Hacked"}, headers=alice)
     assert response.status_code == 404
+
+
+def test_photography_is_photos_and_optional_place_names(client):
+    headers = _register_and_login(client)
+
+    missing = _create_post(client, headers, category="photography", title="", content="", images=[])
+    assert missing.status_code == 422
+
+    created = _create_post(
+        client,
+        headers,
+        category="photography",
+        title="This headline should not be stored",
+        content="This story should not be stored",
+        images=[
+            {"url": "https://example.com/a.jpg", "place_name": "  Hampi  "},
+            "https://example.com/b.jpg",
+        ],
+    )
+    assert created.status_code == 200
+    body = created.json()
+    assert body["title"] == ""
+    assert body["content"] == ""
+    assert body["images"][0]["place_name"] == "Hampi"
+    assert body["images"][0]["image_url"] == "https://example.com/a.jpg"
+    assert body["images"][1]["place_name"] is None
+    assert body["images"][1]["image_url"] == "https://example.com/b.jpg"
+
+    found = client.get("/api/v1/posts", params={"search": "Hampi"})
+    assert body["id"] in {post["id"] for post in found.json()}
+
+    story = _create_post(client, headers, title=" ", content=" ")
+    assert story.status_code == 422
 
 
 def test_image_upload(client, tmp_path, monkeypatch):

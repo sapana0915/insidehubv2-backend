@@ -1,10 +1,12 @@
 from typing import Any, ClassVar, Dict, Optional
 from uuid import UUID
 
-from sqlalchemy import or_
+from sqlalchemy import exists, or_
 from sqlalchemy.orm import Query
 
 from app.core.filters import BaseFilter
+
+from .models import PostImage
 
 
 class PostFilter(BaseFilter):
@@ -24,5 +26,11 @@ class PostFilter(BaseFilter):
         query = super().apply(query, model)
         if self.search:
             term = f"%{self.search.strip()}%"
-            query = query.filter(or_(model.title.ilike(term), model.content.ilike(term)))
+            place_match = exists().where(
+                PostImage.post_id == model.id,
+                PostImage.place_name.ilike(term),
+            )
+            query = query.filter(
+                or_(model.title.ilike(term), model.content.ilike(term), place_match)
+            )
         return query

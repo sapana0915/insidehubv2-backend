@@ -12,6 +12,8 @@ from app.comments.views import CommentViewSet
 from app.core.config import settings
 from app.database import get_db
 from app.middleware.error_handler import setup_exception_handlers
+from app.comments.routers import router as comments_router
+from app.comments.views import CommentViewSet
 from app.posts.routers import router as posts_router
 from app.posts.views import PostViewSet
 from app.users.routers import router as users_router
