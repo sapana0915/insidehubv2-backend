@@ -64,3 +64,16 @@ class UserLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=20)
+    password: str = Field(min_length=8)
+
+
+class MessageResponse(BaseModel):
+    message: str
