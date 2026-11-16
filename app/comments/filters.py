@@ -14,3 +14,4 @@ class CommentFilter(BaseFilter):
     content: Optional[str] = None
     post_id: Optional[UUID] = None
     author_id: Optional[UUID] = None
+    parent_id: Optional[UUID] = None
