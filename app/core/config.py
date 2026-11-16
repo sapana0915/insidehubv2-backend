@@ -97,6 +97,8 @@ class Settings(BaseSettings):
     AI_TIMEOUT_SECONDS: float = 30.0
     AI_MAX_OUTPUT_TOKENS: int = 2000
     AI_DRAFTS_PER_DAY: int = 3
+    # Every model call, including follow-up questions; stops the free questions step being abused.
+    AI_CALLS_PER_DAY: int = 30
 
     def __init__(self, **kwargs: Any) -> None:
         block = _env_block()

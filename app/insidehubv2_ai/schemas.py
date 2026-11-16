@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -7,17 +7,24 @@ from app.posts.constants import CATEGORY_SLUGS, PHOTOGRAPHY_SLUG
 DraftLength = Literal["short", "medium", "long"]
 DraftTone = Literal["warm", "simple", "lively"]
 
-MIN_NOTES_LENGTH = 20
+MIN_PROMPT_LENGTH = 10
+MAX_QUESTIONS = 4
+
+
+class DraftAnswer(BaseModel):
+    question: str = Field(max_length=300)
+    answer: str = Field(max_length=1000)
+
+    @field_validator("question", "answer")
+    @classmethod
+    def strip(cls, value: str) -> str:
+        return value.strip()
 
 
 class DraftRequest(BaseModel):
     category: str
-    notes: str = Field(max_length=4000)
-    where: Optional[str] = Field(default=None, max_length=200)
-    when: Optional[str] = Field(default=None, max_length=200)
-    who: Optional[str] = Field(default=None, max_length=200)
-    detail: Optional[str] = Field(default=None, max_length=500)
-    feeling: Optional[str] = Field(default=None, max_length=300)
+    prompt: str = Field(max_length=4000)
+    answers: List[DraftAnswer] = Field(default_factory=list, max_length=MAX_QUESTIONS)
     length: DraftLength = "medium"
     tone: DraftTone = "warm"
 
@@ -31,25 +38,25 @@ class DraftRequest(BaseModel):
             raise ValueError(f"category must be one of: {', '.join(sorted(CATEGORY_SLUGS))}")
         return slug
 
-    @field_validator("notes")
+    @field_validator("prompt")
     @classmethod
-    def check_notes(cls, value: str) -> str:
+    def check_prompt(cls, value: str) -> str:
         value = value.strip()
-        if len(value) < MIN_NOTES_LENGTH:
-            raise ValueError("Tell a little more about what happened. A sentence or two is enough.")
+        if len(value) < MIN_PROMPT_LENGTH:
+            raise ValueError("Tell us a little about what you want to write.")
         return value
 
-    @field_validator("where", "when", "who", "detail", "feeling")
+    @field_validator("answers")
     @classmethod
-    def blank_to_none(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        return value.strip() or None
+    def drop_empty_answers(cls, value: List[DraftAnswer]) -> List[DraftAnswer]:
+        return [item for item in value if item.question and item.answer]
 
 
 class DraftResponse(BaseModel):
-    title: str
-    content: str
+    status: Literal["draft", "questions"]
+    title: Optional[str] = None
+    content: Optional[str] = None
+    questions: List[str] = []
     remaining_today: int
 
 
