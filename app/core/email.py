@@ -55,3 +55,25 @@ def verification_email(code: str) -> tuple[str, str, str]:
     </div>
     """
     return subject, text, html
+
+
+def password_reset_email(link: str) -> tuple[str, str, str]:
+    """Subject, plain text and HTML for a password reset link."""
+    minutes = settings.PASSWORD_RESET_EXPIRE_MINUTES
+    subject = "Reset your InsideHub password"
+    text = (
+        "Use this link to choose a new InsideHub password:\n"
+        f"{link}\n"
+        f"It expires in {minutes} minutes and can be used once. "
+        "If you didn't ask for this, ignore this email."
+    )
+    html = f"""
+    <div style="background:#f5efe4;padding:32px;font-family:Georgia,serif;color:#1f1b16">
+      <h1 style="font-style:italic;margin:0">Inside<span style="color:#c65d3b">Hub</span></h1>
+      <p style="letter-spacing:.2em;font-size:12px;text-transform:uppercase">Field journal</p>
+      <p>Choose a new password:</p>
+      <p><a href="{link}" style="color:#c65d3b">{link}</a></p>
+      <p style="color:#5b5247">This link expires in {minutes} minutes and works once.</p>
+    </div>
+    """
+    return subject, text, html

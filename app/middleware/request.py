@@ -43,6 +43,10 @@ class RequestWrapper:
     def get_user_role(self) -> str:
         return self.user.get("role")
 
+    @property
+    def is_authenticated(self) -> bool:
+        return self._user is not None
+
 
 async def get_request_wrapper(
     request: Request, token_payload: dict = Depends(get_token_payload)

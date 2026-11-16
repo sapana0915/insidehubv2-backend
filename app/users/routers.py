@@ -12,9 +12,13 @@ from app.database import get_db
 from app.middleware.request import RequestWrapper, get_request_wrapper
 from app.posts.models import Post
 from .otp import consume_code, issue_code
+from .password_reset import apply_password_reset, request_password_reset
 from .repositories import UserRepository
 from .schemas import (
+    ForgotPasswordRequest,
+    MessageResponse,
     PublicUserResponse,
+    ResetPasswordRequest,
     SendCodeRequest,
     SendCodeResponse,
     Token,
@@ -73,6 +77,20 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
     """Login user and get access token."""
     user = UserService.authenticate(db, credentials.email, credentials.password)
     return _token_for(user)
+
+
+@router.post("/forgot-password", response_model=MessageResponse)
+def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """Email a one-time reset link. The response does not reveal whether the email exists."""
+    request_password_reset(db, data.email)
+    return {"message": "If an account exists for that email, we sent a reset link."}
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Set a new password from a reset link."""
+    apply_password_reset(db, data.token, data.password)
+    return {"message": "Password updated. You can sign in now."}
 
 
 @router.get("/me", response_model=UserResponse)

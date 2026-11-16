@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Uuid
+from sqlalchemy import Boolean, DateTime, Integer, String, Uuid, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -29,6 +29,15 @@ class User(Base):
         back_populates="author",
         cascade="all, delete-orphan",
     )
+    likes = relationship("PostLike", back_populates="author",
+                         cascade="all, delete-orphan")
+    comment_likes = relationship("CommentLike", back_populates="author", cascade="all, delete-orphan")
+
+    password_resets = relationship(
+        "PasswordReset",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self):
         return f"<User {self.username}>"
@@ -49,3 +58,28 @@ class EmailVerification(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PasswordReset(Base):
+    """A one-time link that lets an existing user choose a new password."""
+
+    __tablename__ = "password_resets"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String, nullable=False,
+                                            index=True, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                 nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped['User'] = relationship(back_populates="password_resets")

@@ -87,6 +87,10 @@ class Settings(BaseSettings):
     OTP_MAX_ATTEMPTS: int = 5
     OTP_RESEND_COOLDOWN_SECONDS: int = 60
 
+    FRONTEND_URL: str = "http://localhost:3000"
+    PASSWORD_RESET_EXPIRE_MINUTES: int = 30
+    PASSWORD_RESET_RESEND_COOLDOWN_SECONDS: int = 60
+
     def __init__(self, **kwargs: Any) -> None:
         block = _env_block()
         merged: Dict[str, Any] = {}

@@ -17,6 +17,7 @@ def _clean_content(value: str) -> str:
 class CommentCreate(BaseModel):
     content: str = Field(min_length=1, max_length=MAX_COMMENT_LENGTH)
     post_id: UUID
+    parent_id: Optional[UUID] = None
     author_id: Optional[UUID] = None
 
     @field_validator("content")
@@ -45,9 +46,13 @@ class CommentAuthor(BaseModel):
 class CommentResponse(BaseModel):
     id: UUID
     post_id: UUID
+    parent_id: Optional[UUID] = None
     author_id: UUID
     author: Optional[CommentAuthor] = None
     content: str
+    like_count: int = 0
+    liked: bool = False
+    reply_count: int = 0
     created_at: datetime
     updated_at: datetime
 
