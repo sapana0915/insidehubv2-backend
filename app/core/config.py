@@ -91,6 +91,13 @@ class Settings(BaseSettings):
     PASSWORD_RESET_EXPIRE_MINUTES: int = 30
     PASSWORD_RESET_RESEND_COOLDOWN_SECONDS: int = 60
 
+    AI_API_KEY: str = ""
+    AI_BASE_URL: str = ""
+    AI_MODEL: str = "gpt-4o-mini"
+    AI_TIMEOUT_SECONDS: float = 30.0
+    AI_MAX_OUTPUT_TOKENS: int = 2000
+    AI_DRAFTS_PER_DAY: int = 3
+
     def __init__(self, **kwargs: Any) -> None:
         block = _env_block()
         merged: Dict[str, Any] = {}

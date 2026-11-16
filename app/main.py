@@ -18,6 +18,8 @@ from app.users.routers import router as users_router
 from app.users.views import UserViewSet
 from app.likes.routers import comment_likes_router
 from app.likes.routers import router as likes_router
+from app.insidehubv2_ai.routers import router as insidehubv2_ai_router
+
 
 app = FastAPI(
     title="InsideHub API",
@@ -45,6 +47,7 @@ app.include_router(PostViewSet().router, prefix=f"{settings.API_V1_STR}/posts")
 app.include_router(CommentViewSet().router, prefix=f"{settings.API_V1_STR}/comments")
 app.include_router(likes_router, prefix=settings.API_V1_STR)
 app.include_router(comment_likes_router, prefix=settings.API_V1_STR)
+app.include_router(insidehubv2_ai_router, prefix=settings.API_V1_STR)
 
 Path(settings.MEDIA_DIR).mkdir(parents=True, exist_ok=True)
 app.mount(settings.MEDIA_URL, StaticFiles(directory=settings.MEDIA_DIR), name="media")
