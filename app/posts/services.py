@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.exceptions import ValidationException
 
 from .constants import PHOTOGRAPHY_SLUG
+from .html_sanitize import is_blank_html, sanitize_post_html
 from .models import Post
 from .repositories import PostRepository
 from .schemas import PostCreate, PostUpdate
@@ -79,8 +80,8 @@ class PostService:
         title = post.title if post_data.title is None else post_data.title
         content = post.content if post_data.content is None else post_data.content
         title = title.strip()
-        content = content.strip()
-        if not title or not content:
+        content = sanitize_post_html(content)
+        if not title or is_blank_html(content):
             raise ValidationException("Every entry needs a title and a story.")
         post.title = title
         post.content = content
