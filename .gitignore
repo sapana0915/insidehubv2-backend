@@ -52,6 +52,7 @@ htmlcov/
 
 # Logs
 *.log
+logs/
 
 # Uploaded media
 media/

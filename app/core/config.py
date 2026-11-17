@@ -91,6 +91,27 @@ class Settings(BaseSettings):
     PASSWORD_RESET_EXPIRE_MINUTES: int = 30
     PASSWORD_RESET_RESEND_COOLDOWN_SECONDS: int = 60
 
+    LOG_LEVEL: str = "INFO"
+    LOG_DIR: str = "logs"
+
+    AI_API_KEY: str = ""
+    AI_BASE_URL: str = ""
+    AI_MODEL: str = "gpt-oss-20b"
+    AI_TIMEOUT_SECONDS: float = 30.0
+    AI_MAX_OUTPUT_TOKENS: int = 2000
+    AI_DRAFTS_PER_DAY: int = 3
+    # Every model call, including follow-up questions; stops the free questions step being abused.
+    AI_CALLS_PER_DAY: int = 30
+    # "News event" drafts that search the web. Only providers with a built-in browser_search tool (Groq gpt-oss).
+    AI_WEB_SEARCH_ENABLED: bool = False
+    AI_SEARCH_MODEL: str = ""
+    AI_SEARCH_TIMEOUT_SECONDS: float = 90.0
+    AI_WEB_SEARCH_CATEGORIES: str = "tech"
+
+    @property
+    def web_search_categories(self) -> set[str]:
+        return {slug.strip().lower() for slug in self.AI_WEB_SEARCH_CATEGORIES.split(",") if slug.strip()}
+
     def __init__(self, **kwargs: Any) -> None:
         block = _env_block()
         merged: Dict[str, Any] = {}
