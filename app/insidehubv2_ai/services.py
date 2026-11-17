@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -8,18 +9,22 @@ from redis import asyncio as aioredis
 from redis.exceptions import RedisError
 
 from app.core.config import settings
-from app.core.exceptions import DetailedException
+from app.core.exceptions import DetailedException, ValidationException
 from app.posts.constants import CATEGORIES
 
-from .client import AIUnavailable, complete_draft
-from .prompts import build_user_message
-from .schemas import MAX_QUESTIONS, DraftRequest, DraftResponse, DraftUsage
+from .client import AIBusy, AIUnavailable, complete_draft, research
+from .prompts import RESEARCH_PROMPT, build_research_message, build_user_message, system_prompt
+from .schemas import MAX_QUESTIONS, DraftRequest, DraftResponse, DraftSource, DraftUsage
+from .usage import TokenUsage, format_ai_log
 
 logger = logging.getLogger(__name__)
 
 CATEGORY_BY_SLUG = {c["slug"]: c for c in CATEGORIES}
 TITLE_MAX_LENGTH = 200
 QUESTION_MAX_LENGTH = 200
+MAX_SOURCES = 5
+SOURCE_TITLE_MAX_LENGTH = 200
+SOURCE_URL_MAX_LENGTH = 500
 KEY_TTL_SECONDS = 60 * 60 * 48
 
 
@@ -73,7 +78,7 @@ async def _give_back(user_id: UUID) -> None:
     try:
         await redis.decr(_day_key("drafts", user_id))
     except RedisError:
-        logger.warning("Could not return a draft slot for user %s", user_id)
+        logger.warning("%s- WARNING could not return a draft slot", user_id)
     finally:
         await redis.aclose()
 
@@ -89,7 +94,14 @@ async def usage_for_user(user_id: UUID) -> DraftUsage:
 
     limit = settings.AI_DRAFTS_PER_DAY
     used = min(max(int(raw or 0), 0), limit)
-    return DraftUsage(limit=limit, used=used, remaining=limit - used)
+    return DraftUsage(
+        limit=limit,
+        used=used,
+        remaining=limit - used,
+        web_search_categories=(
+            sorted(settings.web_search_categories) if settings.AI_WEB_SEARCH_ENABLED else []
+        ),
+    )
 
 
 def to_plain_story(title: str, content: str) -> tuple[str, str]:
@@ -128,6 +140,57 @@ def to_questions(raw: object) -> list[str]:
     return questions[:MAX_QUESTIONS]
 
 
+def to_sources(raw: object, research_notes: str) -> list[DraftSource]:
+    if not isinstance(raw, list):
+        raise ValueError("sources is not a list")
+    sources: list[DraftSource] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url", "")).strip()
+        if not re.match(r"^https?://\S+$", url) or len(url) > SOURCE_URL_MAX_LENGTH or url in seen:
+            continue
+        if url not in research_notes:
+            continue
+        title = re.sub(r"\s+", " ", str(item.get("title", ""))).strip() or url
+        seen.add(url)
+        sources.append(DraftSource(title=title[:SOURCE_TITLE_MAX_LENGTH], url=url))
+    if not sources:
+        raise ValueError("news draft has no usable sources")
+    return sources[:MAX_SOURCES]
+
+
+def with_sources(content: str, sources: list[DraftSource]) -> str:
+    listed = "; ".join(f"{source.title} ({source.url})" for source in sources)
+    return f"{content}\n\nSources: {listed}"
+
+
+def _log_ai(
+    *,
+    user_id: UUID,
+    status: str,
+    category_name: str,
+    started: float,
+    usage: TokenUsage | None = None,
+    reason: str | None = None,
+    action: str = "AI generated",
+) -> None:
+    message = format_ai_log(
+        user_id=user_id,
+        status=status,
+        category_name=category_name,
+        seconds=time.perf_counter() - started,
+        usage=usage,
+        reason=reason,
+        action=action,
+    )
+    if status == "SUCCESS":
+        logger.info(message)
+    else:
+        logger.warning(message)
+
+
 async def draft_for_user(user_id: UUID, data: DraftRequest) -> DraftResponse:
     if not settings.AI_API_KEY:
         raise DetailedException(
@@ -135,17 +198,58 @@ async def draft_for_user(user_id: UUID, data: DraftRequest) -> DraftResponse:
             "The writing assistant isn't switched on yet.",
         )
 
-    message = build_user_message(CATEGORY_BY_SLUG[data.category], data)
+    category = CATEGORY_BY_SLUG[data.category]
+    category_name = category["name"]
+    web_search = data.use_web_search
+    if web_search and not settings.AI_WEB_SEARCH_ENABLED:
+        raise ValidationException("Writing about news events isn't switched on.")
+    if web_search and data.category not in settings.web_search_categories:
+        raise ValidationException("Writing about news events is only available for Tech posts.")
+
     await _count_call(user_id)
     remaining = await _take_slot(user_id)
     failed = DetailedException(
         status.HTTP_502_BAD_GATEWAY,
         "The writing assistant couldn't draft this right now. Try again in a moment.",
     )
+    research_notes: str | None = None
+    usage = TokenUsage()
+    started = time.perf_counter()
     try:
-        raw = await complete_draft(message)
-    except AIUnavailable:
+        if web_search:
+            research_notes, research_usage = await research(RESEARCH_PROMPT, build_research_message(data))
+            usage.add(research_usage)
+        message = build_user_message(category, data, research_notes)
+        raw, draft_usage = await complete_draft(system_prompt(web_search), message)
+        usage.add(draft_usage)
+    except AIBusy as exc:
         await _give_back(user_id)
+        usage.add(exc.usage)
+        _log_ai(
+            user_id=user_id,
+            status="FAILED",
+            category_name=category_name,
+            started=started,
+            usage=usage,
+            reason=exc.reason,
+        )
+        raise DetailedException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "The writing assistant has reached its limit for now. Try again later today."
+            if exc.daily_quota
+            else "The writing assistant is busy right now. Try again in a minute.",
+        )
+    except AIUnavailable as exc:
+        await _give_back(user_id)
+        usage.add(exc.usage)
+        _log_ai(
+            user_id=user_id,
+            status="FAILED",
+            category_name=category_name,
+            started=started,
+            usage=usage,
+            reason=exc.reason,
+        )
         raise failed
 
     reply_status = raw.get("status")
@@ -155,23 +259,44 @@ async def draft_for_user(user_id: UUID, data: DraftRequest) -> DraftResponse:
                 raise ValueError("asked questions again after the writer answered")
             questions = to_questions(raw.get("questions"))
             await _give_back(user_id)
-            logger.info("AI asked user %s %d questions", user_id, len(questions))
+            _log_ai(
+                user_id=user_id,
+                status="SUCCESS",
+                category_name=category_name,
+                started=started,
+                usage=usage,
+                action=f"AI asked {len(questions)} questions",
+            )
             return DraftResponse(status="questions", questions=questions, remaining_today=remaining + 1)
         if reply_status not in (None, "draft"):
             raise ValueError("unknown reply status")
         title, content = to_plain_story(str(raw.get("title", "")), str(raw.get("content", "")))
+        sources = to_sources(raw.get("sources"), research_notes or "") if web_search else []
     except ValueError as exc:
         await _give_back(user_id)
-        logger.warning(
-            "AI reply rejected for user %s: %s (category=%s, status=%r, keys=%s, answers=%d)",
-            user_id,
-            exc,
-            data.category,
-            reply_status,
-            sorted(raw.keys()),
-            len(data.answers),
+        _log_ai(
+            user_id=user_id,
+            status="FAILED",
+            category_name=category_name,
+            started=started,
+            usage=usage,
+            reason=str(exc),
         )
         raise failed
 
-    logger.info("AI draft for user %s, %d left today", user_id, remaining)
-    return DraftResponse(status="draft", title=title, content=content, remaining_today=remaining)
+    if sources:
+        content = with_sources(content, sources)
+    _log_ai(
+        user_id=user_id,
+        status="SUCCESS",
+        category_name=category_name,
+        started=started,
+        usage=usage,
+    )
+    return DraftResponse(
+        status="draft",
+        title=title,
+        content=content,
+        sources=sources,
+        remaining_today=remaining,
+    )

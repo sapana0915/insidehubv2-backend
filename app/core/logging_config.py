@@ -4,7 +4,10 @@ from pathlib import Path
 
 from app.core.config import settings
 
-LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+# Example AI line:
+# 2026-09-30 18:29:42: {user_id}- SUCCESS Tech AI generated
+LOG_FORMAT = "%(asctime)s: %(message)s"
+DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 LOG_FILE_MAX_BYTES = 5 * 1024 * 1024
 LOG_FILE_BACKUPS = 5
 CONSOLE_HANDLER = "insidehub-console"
@@ -15,7 +18,7 @@ def setup_logging() -> None:
     root = logging.getLogger()
     root.setLevel(settings.LOG_LEVEL.upper())
     existing = {handler.get_name() for handler in root.handlers}
-    formatter = logging.Formatter(LOG_FORMAT)
+    formatter = logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT)
 
     if CONSOLE_HANDLER not in existing:
         console = logging.StreamHandler()
@@ -35,3 +38,11 @@ def setup_logging() -> None:
         file_handler.set_name(FILE_HANDLER)
         file_handler.setFormatter(formatter)
         root.addHandler(file_handler)
+
+    # Keep app messages readable; hide database SQL and raw HTTP chatter.
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)

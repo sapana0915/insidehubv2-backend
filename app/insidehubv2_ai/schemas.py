@@ -27,6 +27,7 @@ class DraftRequest(BaseModel):
     answers: List[DraftAnswer] = Field(default_factory=list, max_length=MAX_QUESTIONS)
     length: DraftLength = "medium"
     tone: DraftTone = "warm"
+    use_web_search: bool = False
 
     @field_validator("category")
     @classmethod
@@ -52,11 +53,17 @@ class DraftRequest(BaseModel):
         return [item for item in value if item.question and item.answer]
 
 
+class DraftSource(BaseModel):
+    title: str
+    url: str
+
+
 class DraftResponse(BaseModel):
     status: Literal["draft", "questions"]
     title: Optional[str] = None
     content: Optional[str] = None
     questions: List[str] = []
+    sources: List[DraftSource] = []
     remaining_today: int
 
 
@@ -64,3 +71,4 @@ class DraftUsage(BaseModel):
     limit: int
     used: int
     remaining: int
+    web_search_categories: List[str]
