@@ -91,6 +91,9 @@ class Settings(BaseSettings):
     PASSWORD_RESET_EXPIRE_MINUTES: int = 30
     PASSWORD_RESET_RESEND_COOLDOWN_SECONDS: int = 60
 
+    LOG_LEVEL: str = "INFO"
+    LOG_DIR: str = "logs"
+
     AI_API_KEY: str = ""
     AI_BASE_URL: str = ""
     AI_MODEL: str = "gpt-4o-mini"

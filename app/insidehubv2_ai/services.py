@@ -138,20 +138,40 @@ async def draft_for_user(user_id: UUID, data: DraftRequest) -> DraftResponse:
     message = build_user_message(CATEGORY_BY_SLUG[data.category], data)
     await _count_call(user_id)
     remaining = await _take_slot(user_id)
+    failed = DetailedException(
+        status.HTTP_502_BAD_GATEWAY,
+        "The writing assistant couldn't draft this right now. Try again in a moment.",
+    )
     try:
         raw = await complete_draft(message)
-        if raw.get("status") == "questions" and not data.answers:
+    except AIUnavailable:
+        await _give_back(user_id)
+        raise failed
+
+    reply_status = raw.get("status")
+    try:
+        if reply_status == "questions":
+            if data.answers:
+                raise ValueError("asked questions again after the writer answered")
             questions = to_questions(raw.get("questions"))
             await _give_back(user_id)
             logger.info("AI asked user %s %d questions", user_id, len(questions))
             return DraftResponse(status="questions", questions=questions, remaining_today=remaining + 1)
+        if reply_status not in (None, "draft"):
+            raise ValueError("unknown reply status")
         title, content = to_plain_story(str(raw.get("title", "")), str(raw.get("content", "")))
-    except (AIUnavailable, ValueError):
+    except ValueError as exc:
         await _give_back(user_id)
-        raise DetailedException(
-            status.HTTP_502_BAD_GATEWAY,
-            "The writing assistant couldn't draft this right now. Try again in a moment.",
+        logger.warning(
+            "AI reply rejected for user %s: %s (category=%s, status=%r, keys=%s, answers=%d)",
+            user_id,
+            exc,
+            data.category,
+            reply_status,
+            sorted(raw.keys()),
+            len(data.answers),
         )
+        raise failed
 
     logger.info("AI draft for user %s, %d left today", user_id, remaining)
     return DraftResponse(status="draft", title=title, content=content, remaining_today=remaining)
