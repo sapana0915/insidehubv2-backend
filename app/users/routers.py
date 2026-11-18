@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.constants import UserRole
-from app.core.exceptions import ConflictException
+from app.core.exceptions import ConflictException, ForbiddenException
 from app.core.security import create_access_token
 from app.database import get_db
 from app.middleware.request import RequestWrapper, get_request_wrapper
@@ -124,3 +124,14 @@ def read_profile(user_id: UUID, db: Session = Depends(get_db)):
         created_at=user.created_at,
         post_count=post_count,
     )
+
+
+@router.post("/{user_id}/deactivate", response_model=UserResponse)
+def deactivate_user(
+    user_id: UUID,
+    request: RequestWrapper = Depends(get_request_wrapper),
+    db: Session = Depends(get_db),
+):
+    if request.get_user_role() != "admin":  # match your role casing
+        raise ForbiddenException("Admin only")
+    return UserService.deactivate(db, user_id)

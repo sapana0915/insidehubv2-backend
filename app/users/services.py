@@ -93,3 +93,17 @@ class UserService:
         if not user.is_active:
             raise UnauthorizedException("User is inactive")
         return user
+
+    @staticmethod
+    def deactivate(db: Session, user_id: UUID) -> User:
+        user = UserRepository.get_by_id(db, user_id)
+        if not user.is_active:
+            raise ConflictException("User is already inactive")
+        user.is_active = False
+        return UserRepository.update(db, user)
+
+    @staticmethod
+    def reactivate(db: Session, user_id: UUID) -> User:
+        user = UserRepository.get_by_id(db, user_id)
+        user.is_active = True
+        return UserRepository.update(db, user)
