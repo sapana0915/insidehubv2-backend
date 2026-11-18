@@ -10,6 +10,8 @@ def build_user_portfolio_pdf(user, posts) -> bytes:
         f"<p>{user.full_name or user.username} · {user.email}</p>",
         f"<p>Exported posts: {len(posts)}</p><hr/>",
     ]
+    if not posts:
+        parts.append("<p>No posts or photos to export yet.</p>")
     for post in posts:
         parts.append(f"<h2>{post.title or '(Photography)'}</h2>")
         parts.append(f"<p><em>{post.category} · {post.created_at.date()}</em></p>")
