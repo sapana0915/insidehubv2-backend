@@ -15,6 +15,7 @@ bleach[css]==6.4.0
 pytest==8.3.4
 pytest-asyncio==0.24.0
 pytest-cov==5.0.0
+xhtml2pdf==0.2.16
 
 # OpenAI
 openai==3.51.0

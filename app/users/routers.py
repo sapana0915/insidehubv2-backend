@@ -3,10 +3,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from fastapi.responses import StreamingResponse
 
+import io
+from .exports import build_user_portfolio_pdf
+from app.posts.repositories import PostRepository
 from app.core.config import settings
 from app.core.constants import UserRole
-from app.core.exceptions import ConflictException
+from app.core.exceptions import ConflictException, ForbiddenException
 from app.core.security import create_access_token
 from app.database import get_db
 from app.middleware.request import RequestWrapper, get_request_wrapper
@@ -123,4 +127,63 @@ def read_profile(user_id: UUID, db: Session = Depends(get_db)):
         full_name=user.full_name,
         created_at=user.created_at,
         post_count=post_count,
+    )
+
+
+@router.post("/{user_id}/deactivate", response_model=UserResponse)
+def deactivate_user(
+    user_id: UUID,
+    request: RequestWrapper = Depends(get_request_wrapper),
+    db: Session = Depends(get_db),
+):
+    if request.get_user_role() != "admin":  # match your role casing
+        raise ForbiddenException("Admin only")
+    return UserService.deactivate(db, user_id)
+
+
+@router.post("/{user_id}/reactivate", response_model=UserResponse)
+def reactivate_user(
+    user_id: UUID,
+    request: RequestWrapper = Depends(get_request_wrapper),
+    db: Session = Depends(get_db),
+):
+    if request.get_user_role() != UserRole.ADMIN.value:
+        raise ForbiddenException("Admin only")
+    return UserService.reactivate(db, user_id)
+
+
+@router.get("/me/export.pdf")
+def export_my_work(
+    request: RequestWrapper = Depends(get_request_wrapper),
+    db: Session = Depends(get_db),
+):
+    user = UserService.get(db, request.get_user_id())
+    posts = PostRepository.list_by_author(db, user.id)
+    pdf = build_user_portfolio_pdf(user, posts)
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="insidehub-{user.username}.pdf"'
+        },
+    )
+
+
+@router.get("/{user_id}/export.pdf")
+def export_user_work(
+    user_id: UUID,
+    request: RequestWrapper = Depends(get_request_wrapper),
+    db: Session = Depends(get_db),
+):
+    if request.get_user_role() != UserRole.ADMIN.value:
+        raise ForbiddenException("Admin only")
+    user = UserService.get(db, user_id)
+    posts = PostRepository.list_by_author(db, user.id)
+    pdf = build_user_portfolio_pdf(user, posts)
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="insidehub-{user.username}.pdf"'
+        },
     )

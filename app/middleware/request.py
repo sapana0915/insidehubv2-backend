@@ -2,6 +2,11 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import Request, Depends
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.users.repositories import UserRepository
+
 from app.core.security import get_token_payload
 from app.core.exceptions import UnauthorizedException
 
@@ -49,22 +54,35 @@ class RequestWrapper:
 
 
 async def get_request_wrapper(
-    request: Request, token_payload: dict = Depends(get_token_payload)
+    request: Request,
+    token_payload: dict = Depends(get_token_payload),
+    db: Session = Depends(get_db),
 ) -> RequestWrapper:
+    user_id = token_payload.get("user_id") or token_payload.get("sub")
+    user = UserRepository.get_by_id(db, UUID(str(user_id)))
+    if not user.is_active:
+        raise UnauthorizedException("User is inactive")
     return RequestWrapper(request, user=token_payload)
 
 
-async def get_optional_request_wrapper(request: Request) -> RequestWrapper:
-    """Get request wrapper with optional authentication"""
+async def get_optional_request_wrapper(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> RequestWrapper:
     from app.core.security import decode_token
 
-    user = None
+    user_payload = None
     auth_header = request.headers.get("authorization", "")
     scheme, _, token = auth_header.partition(" ")
     if scheme.lower() == "bearer" and token:
         try:
-            user = decode_token(token)
+            payload = decode_token(token)
+            user_id = payload.get("user_id") or payload.get("sub")
+            db_user = UserRepository.get_by_id(db, UUID(str(user_id)))
+            if not db_user.is_active:
+                raise UnauthorizedException("User is inactive")
+            user_payload = payload
         except UnauthorizedException:
-            user = None
-
-    return RequestWrapper(request, user=user)
+            raise
+        # optionally catch NotFoundException and leave user_payload = None
+    return RequestWrapper(request, user=user_payload)
