@@ -32,6 +32,16 @@ class PostRepository:
         )
 
     @staticmethod
+    def list_by_author(db: Session, author_id: UUID) -> list:
+        return (
+            db.query(Post)
+            .options(selectinload(Post.images))
+            .filter(Post.author_id == author_id)
+            .order_by(Post.created_at.desc())
+            .all()
+        )
+
+    @staticmethod
     def create(db: Session, post: Post) -> Post:
         db.add(post)
         db.commit()
