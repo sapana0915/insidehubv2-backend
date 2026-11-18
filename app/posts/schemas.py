@@ -4,6 +4,7 @@ from typing import Optional, List, Any
 from datetime import datetime
 
 from .constants import CATEGORY_SLUGS, PHOTOGRAPHY_SLUG
+from .html_sanitize import is_blank_html, sanitize_post_html
 
 MAX_IMAGES_PER_POST = 12
 
@@ -80,10 +81,10 @@ class PostCreate(PostBase):
             return self
 
         title = self.title.strip()
-        content = self.content.strip()
+        content = sanitize_post_html(self.content)
         if not title:
             raise ValueError("Every entry needs a title.")
-        if not content:
+        if is_blank_html(content):
             raise ValueError("Every entry needs a story.")
         self.title = title
         self.content = content
@@ -103,6 +104,13 @@ class PostUpdate(BaseModel):
     @classmethod
     def check_category(cls, value: Optional[str]) -> Optional[str]:
         return _validate_category(value)
+
+    @field_validator("content")
+    @classmethod
+    def sanitize_content(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        return sanitize_post_html(value)
 
     @field_validator("images", mode="before")
     @classmethod

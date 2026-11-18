@@ -184,3 +184,23 @@ def test_image_upload(client, tmp_path, monkeypatch):
         headers={**headers, "Content-Type": "text/plain"},
     )
     assert bad.status_code == 422
+
+
+def test_create_post_sanitizes_html(client):
+    headers = _register_and_login(client)
+    response = _create_post(
+        client,
+        headers,
+        content='<p>Hello <strong>world</strong><script>alert(1)</script></p>',
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "<strong>world</strong>" in body["content"]
+    assert "<script>" not in body["content"].lower()
+    assert "onerror" not in body["content"].lower()
+
+
+def test_empty_html_story_rejected(client):
+    headers = _register_and_login(client)
+    response = _create_post(client, headers, content="<p><br></p>")
+    assert response.status_code == 422
