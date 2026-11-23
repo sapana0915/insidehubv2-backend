@@ -3,8 +3,8 @@ from uuid import UUID
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.exceptions import NotFoundException
-
-from .models import Organization, OrganizationMember
+from app.users.models import User
+from .models import Organization
 
 
 class OrganizationRepository:
@@ -12,7 +12,7 @@ class OrganizationRepository:
     def get_by_id(db: Session, organization_id: UUID) -> Organization:
         org = (
             db.query(Organization)
-            .options(selectinload(Organization.members))
+            .options(selectinload(Organization.users))
             .filter(Organization.id == organization_id)
             .first()
         )
@@ -25,39 +25,54 @@ class OrganizationRepository:
         return db.query(Organization).filter(Organization.slug == slug).first()
 
     @staticmethod
-    def list_for_user(db: Session, user_id: UUID) -> list[OrganizationMember]:
-        return (
-            db.query(OrganizationMember)
-            .options(selectinload(OrganizationMember.organization))
-            .filter(OrganizationMember.user_id == user_id)
-            .all()
+    def get_for_user(db: Session, user_id: UUID) -> Organization | None:
+        """One user → at most one organization (via users.organization_id)."""
+        user = (
+            db.query(User)
+            .options(selectinload(User.organization))
+            .filter(User.id == user_id)
+            .first()
         )
+        if not user or not user.organization_id:
+            return None
+        return user.organization
 
     @staticmethod
-    def create(
-        db: Session,
-        organization: Organization,
-        owner_member: OrganizationMember,
-    ) -> Organization:
+    def create(db: Session, organization: Organization) -> Organization:
         db.add(organization)
-        db.flush()  # get organization.id before member insert
-        owner_member.organization_id = organization.id
-        db.add(owner_member)
         db.commit()
         db.refresh(organization)
         return OrganizationRepository.get_by_id(db, organization.id)
 
     @staticmethod
-    def get_membership(
+    def create_with_owner(
         db: Session,
-        organization_id: UUID,
-        user_id: UUID,
-    ) -> OrganizationMember | None:
+        organization: Organization,
+        owner: User,
+    ) -> tuple[Organization, User]:
+        db.add(organization)
+        db.flush()  # organization.id available
+        owner.organization_id = organization.id
+        owner.org_role = "owner"
+        db.add(owner)
+        db.commit()
+        db.refresh(organization)
+        db.refresh(owner)
+        return organization, owner
+
+    @staticmethod
+    def list_all(db: Session) -> list[Organization]:
+        return db.query(Organization).order_by(Organization.name.asc()).all()
+
+    @staticmethod
+    def count_members(db: Session, organization_id: UUID) -> int:
+        return db.query(User).filter(User.organization_id == organization_id).count()
+
+    @staticmethod
+    def list_members(db: Session, organization_id: UUID) -> list[User]:
         return (
-            db.query(OrganizationMember)
-            .filter(
-                OrganizationMember.organization_id == organization_id,
-                OrganizationMember.user_id == user_id,
-            )
-            .first()
+            db.query(User)
+            .filter(User.organization_id == organization_id)
+            .order_by(User.org_role.asc(), User.username.asc())
+            .all()
         )

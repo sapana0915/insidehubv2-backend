@@ -5,6 +5,10 @@ from sqlalchemy import Boolean, DateTime, Integer, String, Uuid, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.organizations.models import Organization
 
 
 class User(Base):
@@ -21,6 +25,13 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    org_role: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     posts = relationship("Post", back_populates="author")
     images = relationship("PostImage", back_populates="user")
@@ -38,6 +49,9 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    organization: Mapped["Organization | None"] = relationship(
+        back_populates="users",
+        foreign_keys=[organization_id])
 
     def __repr__(self):
         return f"<User {self.username}>"

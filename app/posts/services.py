@@ -3,7 +3,9 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.exceptions import ValidationException
+from app.core.exceptions import ForbiddenException, NotFoundException, ValidationException
+from app.organizations.access import get_user, post_visible_to_user
+from app.users.repositories import UserRepository
 
 from .constants import PHOTOGRAPHY_SLUG
 from .html_sanitize import is_blank_html, sanitize_post_html
@@ -16,8 +18,15 @@ class PostService:
     model = Post
 
     @staticmethod
-    def get(db: Session, post_id: UUID) -> Post:
-        return PostRepository.get_by_id(db, post_id)
+    def get(db: Session, post_id: UUID, request: Any = None) -> Post:
+        post = PostRepository.get_by_id(db, post_id)
+        if request is not None and getattr(request, "is_authenticated", False):
+            user = get_user(db, request.get_user_id())
+            if not post_visible_to_user(post, user):
+                raise NotFoundException("Post")
+        elif request is not None:
+            raise NotFoundException("Post")
+        return post
 
     @staticmethod
     def list(
@@ -31,6 +40,14 @@ class PostService:
         query = db.query(Post).options(
             selectinload(Post.images), selectinload(Post.author)
         )
+        if request is None or not getattr(request, "is_authenticated", False):
+            return []
+        user = get_user(db, request.get_user_id())
+        if user.organization_id:
+            query = query.filter(Post.organization_id == user.organization_id)
+        elif not user.is_admin:
+            return []
+        # Platform admin with no org sees all orgs (support).
         if filters:
             query = filters.apply(query, Post)
         if viewset and viewset.scope_list_to_owner(request):
@@ -42,11 +59,16 @@ class PostService:
 
     @staticmethod
     def create(db: Session, post_data: PostCreate) -> Post:
+        author = UserRepository.get_by_id(db, post_data.author_id)
+        if not author.organization_id:
+            raise ForbiddenException("You must belong to an organization to post")
+
         post = Post(
             title=post_data.title,
             content=post_data.content,
             category=post_data.category,
             author_id=post_data.author_id,
+            organization_id=author.organization_id,
         )
         if post_data.images:
             PostRepository.replace_images(

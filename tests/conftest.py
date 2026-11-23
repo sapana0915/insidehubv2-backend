@@ -18,13 +18,26 @@ Base.metadata.create_all(bind=engine)
 
 # create_all does not alter an existing test database.
 _inspector = inspect(engine)
-if "post_images" in _inspector.get_table_names():
-    _columns = {column["name"] for column in _inspector.get_columns("post_images")}
-    with engine.begin() as _conn:
+_tables = set(_inspector.get_table_names())
+with engine.begin() as _conn:
+    if "post_images" in _tables:
+        _columns = {column["name"] for column in _inspector.get_columns("post_images")}
         if "place_name" not in _columns:
             _conn.execute(text("ALTER TABLE post_images ADD COLUMN place_name VARCHAR(200)"))
         if "position" not in _columns:
             _conn.execute(text("ALTER TABLE post_images ADD COLUMN position INTEGER NOT NULL DEFAULT 0"))
+    if "users" in _tables:
+        _user_cols = {column["name"] for column in _inspector.get_columns("users")}
+        if "organization_id" not in _user_cols:
+            _conn.execute(text("ALTER TABLE users ADD COLUMN organization_id CHAR(36)"))
+        if "org_role" not in _user_cols:
+            _conn.execute(text("ALTER TABLE users ADD COLUMN org_role VARCHAR(50)"))
+    if "posts" in _tables:
+        _post_cols = {column["name"] for column in _inspector.get_columns("posts")}
+        if "organization_id" not in _post_cols:
+            _conn.execute(text("ALTER TABLE posts ADD COLUMN organization_id CHAR(36)"))
+    if "organizations" not in _tables:
+        Base.metadata.create_all(bind=engine)
 
 
 def override_get_db():
