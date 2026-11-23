@@ -44,3 +44,26 @@ class OrganizationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class OrganizationMemberResponse(BaseModel):
+    id: UUID
+    email: EmailStr
+    username: str
+    full_name: Optional[str] = None
+    org_role: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class OrganizationAdminResponse(BaseModel):
+    id: UUID
+    name: str
+    slug: str
+    created_by_id: UUID
+    member_count: int
+    created_at: datetime
+    updated_at: datetime

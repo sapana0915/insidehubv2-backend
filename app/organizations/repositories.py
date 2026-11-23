@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.exceptions import NotFoundException
 from app.users.models import User
-
 from .models import Organization
 
 
@@ -60,3 +59,20 @@ class OrganizationRepository:
         db.refresh(organization)
         db.refresh(owner)
         return organization, owner
+
+    @staticmethod
+    def list_all(db: Session) -> list[Organization]:
+        return db.query(Organization).order_by(Organization.name.asc()).all()
+
+    @staticmethod
+    def count_members(db: Session, organization_id: UUID) -> int:
+        return db.query(User).filter(User.organization_id == organization_id).count()
+
+    @staticmethod
+    def list_members(db: Session, organization_id: UUID) -> list[User]:
+        return (
+            db.query(User)
+            .filter(User.organization_id == organization_id)
+            .order_by(User.org_role.asc(), User.username.asc())
+            .all()
+        )
