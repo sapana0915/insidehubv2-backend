@@ -6,7 +6,9 @@ from sqlalchemy.orm import Query
 
 from app.core.filters import BaseFilter
 
+
 from .models import PostImage
+from app.users.models import User
 
 
 class PostFilter(BaseFilter):
@@ -30,7 +32,13 @@ class PostFilter(BaseFilter):
                 PostImage.post_id == model.id,
                 PostImage.place_name.ilike(term),
             )
+            author_match = exists().where(
+                User.id == model.author_id,
+                or_(User.full_name.ilike(term), User.username.ilike(term))
+            )
             query = query.filter(
-                or_(model.title.ilike(term), model.content.ilike(term), place_match)
+                or_(model.title.ilike(term), model.content.ilike(term),
+                    author_match,
+                    place_match)
             )
         return query

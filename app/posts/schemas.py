@@ -143,6 +143,7 @@ class PostResponse(BaseModel):
     content: str
     category: str
     author_id: UUID
+    organization_id: UUID
     author: Optional[PostAuthor] = None
     images: List[PostImageResponse] = []
     created_at: datetime

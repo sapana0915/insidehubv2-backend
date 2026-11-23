@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from app.users.models import User
     from app.comments.models import Comment
     from app.likes.models import PostLike
+    from app.organizations.models import Organization
 
 
 class Post(Base):
@@ -26,6 +27,12 @@ class Post(Base):
     author_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )

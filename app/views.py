@@ -89,7 +89,10 @@ class ModelViewSet:
         return UUID(str(uid))
 
     def _get_owned_or_404(self, db: Session, obj_id: UUID, request: RequestWrapper, action: str):
-        obj = self.service.get(db, obj_id)
+        try:
+            obj = self.service.get(db, obj_id, request=request)
+        except TypeError:
+            obj = self.service.get(db, obj_id)
         if action not in self.owner_actions:
             return obj
         if (

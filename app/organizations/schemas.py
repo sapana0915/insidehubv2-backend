@@ -2,12 +2,16 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, EmailStr
 
 
 class OrganizationCreate(BaseModel):
     name: str = Field(min_length=3, max_length=200)
     slug: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    owner_email: EmailStr
+    owner_username: str = Field(min_length=3, max_length=100)
+    owner_password: str = Field(min_length=8)
+    owner_full_name: Optional[str] = None
 
     @field_validator("name")
     @classmethod
@@ -34,6 +38,7 @@ class OrganizationResponse(BaseModel):
     slug: str
     created_by_id: UUID
     role: Optional[str] = None  # caller's role in this org
+    owner_email: Optional[EmailStr] = None
     created_at: datetime
     updated_at: datetime
 

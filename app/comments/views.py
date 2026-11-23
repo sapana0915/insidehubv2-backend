@@ -18,8 +18,8 @@ class CommentViewSet(ModelViewSet):
     owner_actions = ("update", "delete")
 
     permissions = {
-        "list": [],
-        "retrieve": [],
+        "list": ["AUTHENTICATED"],
+        "retrieve": ["AUTHENTICATED"],
         "create": ["AUTHENTICATED"],
         "update": ["AUTHENTICATED"],
         "delete": ["AUTHENTICATED", "ADMIN"],

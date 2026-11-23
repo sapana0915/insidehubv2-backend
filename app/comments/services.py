@@ -5,20 +5,24 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.exceptions import NotFoundException, ValidationException
+from app.likes.models import CommentLike
+from app.organizations.access import ensure_post_in_user_org, get_user
 from app.posts.models import Post
 
 from .models import Comment
 from .repositories import CommentRepository
 from .schemas import CommentCreate, CommentUpdate
-from app.likes.models import CommentLike
 
 
 class CommentService:
     model = Comment
 
     @staticmethod
-    def get(db: Session, comment_id: UUID) -> Comment:
-        return CommentRepository.get_by_id(db, comment_id)
+    def get(db: Session, comment_id: UUID, request: Any = None) -> Comment:
+        comment = CommentRepository.get_by_id(db, comment_id)
+        if request is not None and getattr(request, "is_authenticated", False):
+            ensure_post_in_user_org(db, comment.post_id, request.get_user_id())
+        return comment
 
     @staticmethod
     def _reply_count(db: Session, comment_id: UUID) -> int:
@@ -38,6 +42,16 @@ class CommentService:
         viewset: Any = None,
     ) -> list:
         query = db.query(Comment).options(selectinload(Comment.author))
+        if request is not None and getattr(request, "is_authenticated", False):
+            user = get_user(db, request.get_user_id())
+            if user.organization_id:
+                query = query.join(Post, Comment.post_id == Post.id).filter(
+                    Post.organization_id == user.organization_id
+                )
+            elif not user.is_admin:
+                return []
+        else:
+            return []
         if filters:
             query = filters.apply(query, Comment)
         if getattr(filters, "parent_id", None) is None:
@@ -84,9 +98,7 @@ class CommentService:
 
     @staticmethod
     def create(db: Session, comment_data: CommentCreate) -> Comment:
-        post = db.query(Post.id).filter(Post.id == comment_data.post_id).first()
-        if not post:
-            raise NotFoundException("Post")
+        ensure_post_in_user_org(db, comment_data.post_id, comment_data.author_id)
 
         parent_id = comment_data.parent_id
         if parent_id is not None:

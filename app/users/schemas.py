@@ -13,7 +13,8 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(min_length=8)
-    code: str = Field(min_length=6, max_length=6)
+    # OTP disabled for now — uncomment when email verification is required again:
+    # code: str = Field(min_length=6, max_length=6)
 
 
 class UserUpdate(BaseModel):
