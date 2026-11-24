@@ -1,4 +1,9 @@
+from typing import TYPE_CHECKING
+
 from .schemas import DraftRequest
+
+if TYPE_CHECKING:
+    from app.organizations.models import Organization
 
 REQUEST_RULES = """
 The writer's request
@@ -21,6 +26,8 @@ Voice
 - warm: like a letter to a friend. Everyday words.
 - simple: short sentences. A reader who rarely writes should understand every line.
 - lively: a little humour is fine. Stay honest.
+- If organization context is provided, match its tone and audience without inventing
+  facts the writer did not give.
 
 Length
 - short: 2 to 4 paragraphs.
@@ -145,7 +152,31 @@ def build_research_message(data: DraftRequest) -> str:
     return f"The writer's request:\n{data.prompt}"
 
 
-def build_user_message(category: dict, data: DraftRequest, research_notes: str | None = None) -> str:
+def build_org_context(org: "Organization | None") -> str:
+    if not org:
+        return ""
+    lines = ["Organization context (voice and framing only; do not invent personal facts):"]
+    if org.name:
+        lines.append(f"- Name: {org.name}")
+    if org.description:
+        lines.append(f"- Description: {org.description}")
+    if org.industry:
+        lines.append(f"- Industry: {org.industry}")
+    if org.target_audience:
+        lines.append(f"- Target audience: {org.target_audience}")
+    if org.website_url:
+        lines.append(f"- Website URL: {org.website_url}")
+    if org.brand_keywords:
+        lines.append(f"- Brand keywords: {org.brand_keywords}")
+    return "\n".join(lines)
+
+
+def build_user_message(
+    category: dict,
+    data: DraftRequest,
+    research_notes: str | None = None,
+    organization: "Organization | None" = None,
+) -> str:
     lines = [
         f"Category: {category['name']}",
         f"Length: {data.length}",
@@ -154,6 +185,9 @@ def build_user_message(category: dict, data: DraftRequest, research_notes: str |
         "The writer's request:",
         data.prompt,
     ]
+    org_context = build_org_context(organization)
+    if org_context:
+        lines += ["", org_context]
     if data.answers:
         lines += ["", "Your earlier questions and the writer's answers:"]
         for item in data.answers:

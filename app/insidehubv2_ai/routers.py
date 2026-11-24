@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
+from app.database import get_db
 from app.middleware.request import RequestWrapper, get_request_wrapper
 
 from .schemas import DraftRequest, DraftResponse, DraftUsage
@@ -17,7 +19,8 @@ async def get_draft_usage(wrapper: RequestWrapper = Depends(get_request_wrapper)
 @router.post("/drafts", response_model=DraftResponse)
 async def create_draft(
     body: DraftRequest,
+    db: Session = Depends(get_db),
     wrapper: RequestWrapper = Depends(get_request_wrapper),
 ):
     """Turn a person's notes into a title and story. Does not save a post."""
-    return await draft_for_user(wrapper.get_user_id(), body)
+    return await draft_for_user(db, wrapper.get_user_id(), body)

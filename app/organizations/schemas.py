@@ -8,6 +8,13 @@ from pydantic import BaseModel, Field, field_validator, EmailStr
 class OrganizationCreate(BaseModel):
     name: str = Field(min_length=3, max_length=200)
     slug: Optional[str] = Field(default=None, min_length=1, max_length=200)
+
+    description: Optional[str] = Field(default=None, max_length=2000)
+    industry: Optional[str] = Field(default=None, max_length=200)
+    target_audience: Optional[str] = Field(default=None, max_length=200)
+    website_url: Optional[str] = Field(default=None, max_length=500)
+    brand_keywords: Optional[str] = Field(default=None, max_length=1000)
+
     owner_email: EmailStr
     owner_username: str = Field(min_length=3, max_length=100)
     owner_password: str = Field(min_length=8)
@@ -36,6 +43,13 @@ class OrganizationResponse(BaseModel):
     id: UUID
     name: str
     slug: str
+
+    description: Optional[str] = None
+    industry: Optional[str] = None
+    target_audience: Optional[str] = None
+    website_url: Optional[str] = None
+    brand_keywords: Optional[str] = None
+
     created_by_id: UUID
     role: Optional[str] = None  # caller's role in this org
     owner_email: Optional[EmailStr] = None
@@ -63,6 +77,13 @@ class OrganizationAdminResponse(BaseModel):
     id: UUID
     name: str
     slug: str
+
+    description: Optional[str] = None
+    industry: Optional[str] = None
+    target_audience: Optional[str] = None
+    website_url: Optional[str] = None
+    brand_keywords: Optional[str] = None
+
     created_by_id: UUID
     member_count: int
     created_at: datetime

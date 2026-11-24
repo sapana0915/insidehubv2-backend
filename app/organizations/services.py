@@ -44,6 +44,11 @@ class OrganizationService:
             name=data.name,
             slug=slug,
             created_by_id=admin_user_id,
+            description=data.description,
+            industry=data.industry,
+            target_audience=data.target_audience,
+            website_url=data.website_url,
+            brand_keywords=data.brand_keywords,
         )
         owner = User(
             email=email,
@@ -58,6 +63,14 @@ class OrganizationService:
             id=org.id,
             name=org.name,
             slug=org.slug,
+
+            description=org.description,
+            industry=org.industry,
+            target_audience=org.target_audience,
+            website_url=org.website_url,
+            brand_keywords=org.brand_keywords,
+
+
             created_by_id=org.created_by_id,
             role=None,  # admin is not a member
             owner_email=owner.email,
@@ -75,6 +88,13 @@ class OrganizationService:
             OrganizationResponse(
                 id=org.id,
                 name=org.name,
+
+                description=org.description,
+                industry=org.industry,
+                target_audience=org.target_audience,
+                website_url=org.website_url,
+                brand_keywords=org.brand_keywords,
+
                 slug=org.slug,
                 created_by_id=org.created_by_id,
                 role=user.org_role,
@@ -103,6 +123,13 @@ class OrganizationService:
                 id=org.id,
                 name=org.name,
                 slug=org.slug,
+
+                description=org.description,
+                industry=org.industry,
+                target_audience=org.target_audience,
+                website_url=org.website_url,
+                brand_keywords=org.brand_keywords,
+
                 created_by_id=org.created_by_id,
                 member_count=OrganizationRepository.count_members(db, org.id),
                 created_at=org.created_at,
