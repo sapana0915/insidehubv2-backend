@@ -3,20 +3,52 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import ConflictException, ForbiddenException
+from app.core.exceptions import ConflictException, ForbiddenException, ValidationException
 from app.core.security import hash_password
 from app.users.models import User
 from app.users.repositories import UserRepository
 
+from .constants import OrganizationRole
+from .email_domains import domain_from_email, normalize_email_domain
 from .models import Organization
 from .repositories import OrganizationRepository
-from .schemas import OrganizationCreate, OrganizationResponse, OrganizationMemberResponse, OrganizationAdminResponse
+from .schemas import (
+    OrganizationAdminResponse,
+    OrganizationCreate,
+    OrganizationMemberResponse,
+    OrganizationResponse,
+    OrganizationUpdate,
+)
 
 
 def _slugify(value: str) -> str:
     value = value.strip().lower()
     value = re.sub(r"[^a-z0-9]+", "-", value)
     return value.strip("-") or "org"
+
+
+def _org_response(
+    org: Organization,
+    *,
+    role: str | None = None,
+    owner_email: str | None = None,
+) -> OrganizationResponse:
+    return OrganizationResponse(
+        id=org.id,
+        name=org.name,
+        slug=org.slug,
+        description=org.description,
+        industry=org.industry,
+        target_audience=org.target_audience,
+        website_url=org.website_url,
+        brand_keywords=org.brand_keywords,
+        email_domain=org.email_domain,
+        created_by_id=org.created_by_id,
+        role=role,
+        owner_email=owner_email,
+        created_at=org.created_at,
+        updated_at=org.updated_at,
+    )
 
 
 class OrganizationService:
@@ -40,6 +72,23 @@ class OrganizationService:
         if UserRepository.get_by_username(db, data.owner_username):
             raise ConflictException("Owner username already taken")
 
+        if data.email_domain:
+            email_domain = normalize_email_domain(data.email_domain)
+        else:
+            try:
+                email_domain = normalize_email_domain(domain_from_email(email))
+            except ValidationException as exc:
+                raise ValidationException(
+                    "Set email_domain to your company domain "
+                    "(public emails like gmail.com cannot be used for auto-join)."
+                ) from exc
+        if not email_domain:
+            raise ValidationException("email_domain is required for member auto-join")
+        if OrganizationRepository.get_by_email_domain(db, email_domain):
+            raise ConflictException(
+                f"Email domain '{email_domain}' is already used by another organization"
+            )
+
         organization = Organization(
             name=data.name,
             slug=slug,
@@ -49,6 +98,7 @@ class OrganizationService:
             target_audience=data.target_audience,
             website_url=data.website_url,
             brand_keywords=data.brand_keywords,
+            email_domain=email_domain,
         )
         owner = User(
             email=email,
@@ -59,24 +109,7 @@ class OrganizationService:
         )
         org, owner = OrganizationRepository.create_with_owner(db, organization, owner)
 
-        return OrganizationResponse(
-            id=org.id,
-            name=org.name,
-            slug=org.slug,
-
-            description=org.description,
-            industry=org.industry,
-            target_audience=org.target_audience,
-            website_url=org.website_url,
-            brand_keywords=org.brand_keywords,
-
-
-            created_by_id=org.created_by_id,
-            role=None,  # admin is not a member
-            owner_email=owner.email,
-            created_at=org.created_at,
-            updated_at=org.updated_at,
-        )
+        return _org_response(org, owner_email=owner.email)
 
     @staticmethod
     def list_mine(db: Session, user_id: UUID) -> list[OrganizationResponse]:
@@ -84,25 +117,7 @@ class OrganizationService:
         org = OrganizationRepository.get_for_user(db, user_id)
         if not org:
             return []
-        return [
-            OrganizationResponse(
-                id=org.id,
-                name=org.name,
-
-                description=org.description,
-                industry=org.industry,
-                target_audience=org.target_audience,
-                website_url=org.website_url,
-                brand_keywords=org.brand_keywords,
-
-                slug=org.slug,
-                created_by_id=org.created_by_id,
-                role=user.org_role,
-                owner_email=None,
-                created_at=org.created_at,
-                updated_at=org.updated_at,
-            )
-        ]
+        return [_org_response(org, role=user.org_role)]
 
     @staticmethod
     def _require_admin(db: Session, user_id: UUID) -> User:
@@ -123,13 +138,12 @@ class OrganizationService:
                 id=org.id,
                 name=org.name,
                 slug=org.slug,
-
                 description=org.description,
                 industry=org.industry,
                 target_audience=org.target_audience,
                 website_url=org.website_url,
                 brand_keywords=org.brand_keywords,
-
+                email_domain=org.email_domain,
                 created_by_id=org.created_by_id,
                 member_count=OrganizationRepository.count_members(db, org.id),
                 created_at=org.created_at,
@@ -159,3 +173,71 @@ class OrganizationService:
             )
             for user in members
         ]
+
+    @staticmethod
+    def update_for_admin(
+        db: Session,
+        admin_user_id: UUID,
+        organization_id: UUID,
+        data: OrganizationUpdate,
+    ) -> OrganizationAdminResponse:
+        OrganizationService._require_admin(db, admin_user_id)
+        org = OrganizationRepository.get_by_id(db, organization_id)
+        payload = data.model_dump(exclude_unset=True)
+
+        if "email_domain" in payload:
+            email_domain = normalize_email_domain(payload["email_domain"])
+            if email_domain:
+                existing = OrganizationRepository.get_by_email_domain(db, email_domain)
+                if existing and existing.id != org.id:
+                    raise ConflictException(
+                        f"Email domain '{email_domain}' is already used by another organization"
+                    )
+            org.email_domain = email_domain
+            payload.pop("email_domain")
+
+        for field, value in payload.items():
+            setattr(org, field, value)
+
+        db.add(org)
+        db.commit()
+        db.refresh(org)
+        return OrganizationAdminResponse(
+            id=org.id,
+            name=org.name,
+            slug=org.slug,
+            description=org.description,
+            industry=org.industry,
+            target_audience=org.target_audience,
+            website_url=org.website_url,
+            brand_keywords=org.brand_keywords,
+            email_domain=org.email_domain,
+            created_by_id=org.created_by_id,
+            member_count=OrganizationRepository.count_members(db, org.id),
+            created_at=org.created_at,
+            updated_at=org.updated_at,
+        )
+
+    @staticmethod
+    def join_by_email(db: Session, user_id: UUID) -> OrganizationResponse:
+        """Assign the current user to the org matching their email domain."""
+        user = UserRepository.get_by_id(db, user_id)
+        if user.organization_id:
+            org = OrganizationRepository.get_by_id(db, user.organization_id)
+            return _org_response(org, role=user.org_role)
+
+        domain = domain_from_email(user.email)
+        if not domain:
+            raise ValidationException("Your email address is invalid")
+
+        org = OrganizationRepository.get_by_email_domain(db, domain)
+        if not org:
+            raise ValidationException(
+                f"No organization is set up for @{domain}. "
+                "Ask your admin to create the organization with that email domain."
+            )
+
+        user.organization_id = org.id
+        user.org_role = OrganizationRole.MEMBER.value
+        UserRepository.update(db, user)
+        return _org_response(org, role=user.org_role)

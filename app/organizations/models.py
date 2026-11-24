@@ -27,6 +27,12 @@ class Organization(Base):
     target_audience: Mapped[str | None] = mapped_column(String(200), nullable=True)
     website_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     brand_keywords: Mapped[str | None] = mapped_column(Text, nullable=True)
+    email_domain: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
 
     created_by_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),

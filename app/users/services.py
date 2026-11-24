@@ -3,8 +3,12 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import ConflictException, UnauthorizedException
+from app.core.exceptions import ConflictException, UnauthorizedException, ValidationException
 from app.core.security import hash_password, verify_password
+from app.organizations.constants import OrganizationRole
+from app.organizations.email_domains import domain_from_email
+from app.organizations.repositories import OrganizationRepository
+
 from .models import User
 from .repositories import UserRepository
 from .schemas import UserCreate, UserUpdate
@@ -45,11 +49,24 @@ class UserService:
         if existing_username:
             raise ConflictException("Username already taken")
 
+        domain = domain_from_email(user_data.email)
+        if not domain:
+            raise ValidationException("Email address is invalid")
+        organization = OrganizationRepository.get_by_email_domain(db, domain)
+        if not organization:
+            raise ValidationException(
+                f"No organization is set up for @{domain}. "
+                "Use your company email, or ask your admin to create the organization "
+                "with that email domain."
+            )
+
         user = User(
             email=user_data.email,
             username=user_data.username,
             full_name=user_data.full_name,
             hashed_password=hash_password(user_data.password),
+            organization_id=organization.id,
+            org_role=OrganizationRole.MEMBER.value,
         )
         return UserRepository.create(db, user)
 
