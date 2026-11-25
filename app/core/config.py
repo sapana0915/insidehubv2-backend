@@ -74,6 +74,34 @@ class Settings(BaseSettings):
     MEDIA_URL: str = "/media"
     MAX_UPLOAD_BYTES: int = 5 * 1024 * 1024
 
+    # "local" saves files under MEDIA_DIR. "s3" is for later, after local uploads work.
+    STORAGE_BACKEND: Literal["local", "s3"] = "local"
+
+    # WebP quality is 1–100. 80 is sharp enough for photos and much smaller than the original.
+    WEBP_QUALITY: int = 80
+
+    # Width × height after decompression. Stops a small file from expanding into a huge image.
+    MAX_IMAGE_PIXELS: int = 20_000_000
+
+    # Pillow's names. JPEG, not JPG.
+    ALLOWED_IMAGE_FORMATS: str = "JPEG,PNG,WEBP,GIF"
+
+    PROFILE_IMAGE_SIZE: int = 400
+    POST_THUMBNAIL_WIDTH: int = 400
+    POST_THUMBNAIL_HEIGHT: int = 300
+    POST_COVER_WIDTH: int = 1920
+    POST_COVER_HEIGHT: int = 1080
+    POST_CONTENT_MAX_WIDTH: int = 1600
+    POST_CONTENT_MAX_HEIGHT: int = 1200
+
+    # Used only when STORAGE_BACKEND=s3. Leave blank while testing locally.
+    AWS_S3_BUCKET: str = ""
+    AWS_S3_REGION: str = ""
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    S3_PUBLIC_BASE_URL: str = ""
+    AWS_S3_ENDPOINT_URL: str = ""
+
     # "console" prints the code in the logs; "smtp" sends a real email.
     EMAIL_BACKEND: Literal["console", "smtp"] = "smtp"
     SMTP_HOST: str = "smtp.gmail.com"
@@ -112,6 +140,14 @@ class Settings(BaseSettings):
     def web_search_categories(self) -> set[str]:
         return {slug.strip().lower() for slug in self.AI_WEB_SEARCH_CATEGORIES.split(",") if slug.strip()}
 
+    @property
+    def allowed_image_formats(self) -> set[str]:
+        return {
+            item.strip().upper()
+            for item in self.ALLOWED_IMAGE_FORMATS.split(",")
+            if item.strip()
+        }
+
     def __init__(self, **kwargs: Any) -> None:
         block = _env_block()
         merged: Dict[str, Any] = {}
@@ -129,6 +165,7 @@ class Settings(BaseSettings):
         merged.update(kwargs)
         super().__init__(**merged)
         self._validate_production()
+        self._validate_storage()
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -146,6 +183,13 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in stripped.split(",") if origin.strip()]
         return value
 
+    @field_validator("WEBP_QUALITY")
+    @classmethod
+    def check_webp_quality(cls, value: int) -> int:
+        if not 1 <= value <= 100:
+            raise ValueError("WEBP_QUALITY must be between 1 and 100")
+        return value
+
     def _validate_production(self) -> None:
         if self.ENVIRONMENT != "prod":
             return
@@ -153,6 +197,20 @@ class Settings(BaseSettings):
             raise ValueError("SECRET_KEY must be set to a strong value in production")
         if not self.DATABASE_URL:
             raise ValueError("DATABASE_URL must be set in production")
+
+    def _validate_storage(self) -> None:
+        if self.STORAGE_BACKEND != "s3":
+            return
+        missing = [
+            name
+            for name, value in (
+                ("AWS_S3_BUCKET", self.AWS_S3_BUCKET),
+                ("AWS_S3_REGION", self.AWS_S3_REGION),
+            )
+            if not str(value).strip()
+        ]
+        if missing:
+            raise ValueError("STORAGE_BACKEND=s3 requires " + ", ".join(missing))
 
 
 settings = Settings(ENVIRONMENT=os.getenv("ENVIRONMENT", "dev"))  # type: ignore[arg-type]

@@ -84,3 +84,34 @@ class OrganizationRepository:
             .order_by(User.org_role.asc(), User.username.asc())
             .all()
         )
+
+    @staticmethod
+    def update(db: Session, org: Organization) -> Organization:
+        db.add(org)
+        db.commit()
+        db.refresh(org)
+        return org
+
+    @staticmethod
+    def delete(db: Session, org: Organization) -> None:
+        db.delete(org)
+        db.commit()
+
+    @staticmethod
+    def get_member(
+        db: Session,
+        organization_id: UUID,
+        member_user_id: UUID,
+    ) -> User:
+        user = (
+            db.query(User)
+            .filter(
+                User.id == member_user_id,
+                User.organization_id == organization_id,
+            )
+            .first()
+        )
+        if not user:
+            raise NotFoundException("Organization member")
+        return user
+

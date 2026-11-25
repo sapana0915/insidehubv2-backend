@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -10,6 +10,7 @@ from .schemas import (
     OrganizationAdminResponse,
     OrganizationCreate,
     OrganizationMemberResponse,
+    OrganizationMemberUpdate,
     OrganizationResponse,
     OrganizationUpdate,
 )
@@ -24,6 +25,7 @@ def create_organization(
     db: Session = Depends(get_db),
     request: RequestWrapper = Depends(get_request_wrapper),
 ):
+    """Platform admin: create an organization and its owner."""
     return OrganizationService.create(db, data, request.get_user_id())
 
 
@@ -32,6 +34,7 @@ def get_organizations(
     db: Session = Depends(get_db),
     request: RequestWrapper = Depends(get_request_wrapper),
 ):
+    """Platform admin: list all organizations."""
     return OrganizationService.list_all_for_admin(db, request.get_user_id())
 
 
@@ -68,6 +71,17 @@ def update_organization(
     )
 
 
+@router.delete("/{organization_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_organization(
+    organization_id: UUID,
+    db: Session = Depends(get_db),
+    request: RequestWrapper = Depends(get_request_wrapper),
+):
+    """Platform admin: delete an organization and its posts/prompt logs."""
+    OrganizationService.delete_for_admin(db, request.get_user_id(), organization_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get(
     "/{organization_id}/members",
     response_model=list[OrganizationMemberResponse],
@@ -77,9 +91,50 @@ def list_organization_members(
     db: Session = Depends(get_db),
     request: RequestWrapper = Depends(get_request_wrapper),
 ):
-    """Platform admin: users in one organization."""
-    return OrganizationService.list_members_for_admin(
+    """Admin (any org) or organization owner (their org): list members."""
+    return OrganizationService.list_members(
         db,
         request.get_user_id(),
         organization_id,
     )
+
+
+@router.patch(
+    "/{organization_id}/members/{member_user_id}",
+    response_model=OrganizationMemberResponse,
+)
+def update_organization_member(
+    organization_id: UUID,
+    member_user_id: UUID,
+    data: OrganizationMemberUpdate,
+    db: Session = Depends(get_db),
+    request: RequestWrapper = Depends(get_request_wrapper),
+):
+    """Organization owner only: update a member's role or active status."""
+    return OrganizationService.update_member_for_owner(
+        db,
+        request.get_user_id(),
+        organization_id,
+        member_user_id,
+        data,
+    )
+
+
+@router.delete(
+    "/{organization_id}/members/{member_user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_organization_member(
+    organization_id: UUID,
+    member_user_id: UUID,
+    db: Session = Depends(get_db),
+    request: RequestWrapper = Depends(get_request_wrapper),
+):
+    """Organization owner only: remove a member from the organization."""
+    OrganizationService.remove_member_for_owner(
+        db,
+        request.get_user_id(),
+        organization_id,
+        member_user_id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

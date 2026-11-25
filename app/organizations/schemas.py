@@ -120,6 +120,24 @@ class OrganizationMemberResponse(BaseModel):
         from_attributes = True
 
 
+class OrganizationMemberUpdate(BaseModel):
+    """Owner-only: change a member's role or active status."""
+
+    org_role: Optional[str] = Field(default=None, max_length=50)
+    is_active: Optional[bool] = None
+
+    @field_validator("org_role")
+    @classmethod
+    def clean_org_role(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip().lower()
+        allowed = {"admin", "member"}
+        if value not in allowed:
+            raise ValueError("org_role must be 'admin' or 'member'")
+        return value
+
+
 class OrganizationAdminResponse(BaseModel):
     id: UUID
     name: str
