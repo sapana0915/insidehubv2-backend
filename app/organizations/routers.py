@@ -11,6 +11,7 @@ from .schemas import (
     OrganizationCreate,
     OrganizationMemberResponse,
     OrganizationResponse,
+    OrganizationUpdate,
 )
 from .services import OrganizationService
 
@@ -40,6 +41,31 @@ def list_my_organizations(
     request: RequestWrapper = Depends(get_request_wrapper),
 ):
     return OrganizationService.list_mine(db, request.get_user_id())
+
+
+@router.post("/join", response_model=OrganizationResponse)
+def join_organization(
+    db: Session = Depends(get_db),
+    request: RequestWrapper = Depends(get_request_wrapper),
+):
+    """Join the organization that matches the caller's email domain."""
+    return OrganizationService.join_by_email(db, request.get_user_id())
+
+
+@router.patch("/{organization_id}", response_model=OrganizationAdminResponse)
+def update_organization(
+    organization_id: UUID,
+    data: OrganizationUpdate,
+    db: Session = Depends(get_db),
+    request: RequestWrapper = Depends(get_request_wrapper),
+):
+    """Platform admin: update organization profile / email domain."""
+    return OrganizationService.update_for_admin(
+        db,
+        request.get_user_id(),
+        organization_id,
+        data,
+    )
 
 
 @router.get(

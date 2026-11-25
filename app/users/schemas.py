@@ -28,6 +28,8 @@ class UserResponse(UserBase):
     id: UUID
     is_active: bool
     is_admin: bool
+    organization_id: Optional[UUID] = None
+    org_role: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

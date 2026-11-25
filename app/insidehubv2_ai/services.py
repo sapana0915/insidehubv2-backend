@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 import time
@@ -7,13 +8,18 @@ from uuid import UUID
 from fastapi import status
 from redis import asyncio as aioredis
 from redis.exceptions import RedisError
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.exceptions import DetailedException, ValidationException
+from app.core.exceptions import DetailedException, ForbiddenException, ValidationException
+from app.organizations.repositories import OrganizationRepository
 from app.posts.constants import CATEGORIES
+from app.users.repositories import UserRepository
 
 from .client import AIBusy, AIUnavailable, complete_draft, research
+from .models import AiPromptLog
 from .prompts import RESEARCH_PROMPT, build_research_message, build_user_message, system_prompt
+from .repositories import AiPromptLogRepository
 from .schemas import MAX_QUESTIONS, DraftRequest, DraftResponse, DraftSource, DraftUsage
 from .usage import TokenUsage, format_ai_log
 
@@ -191,12 +197,50 @@ def _log_ai(
         logger.warning(message)
 
 
-async def draft_for_user(user_id: UUID, data: DraftRequest) -> DraftResponse:
+def _save_prompt_log(
+    db: Session,
+    *,
+    user_id: UUID,
+    organization_id: UUID,
+    data: DraftRequest,
+    status: str,
+    error_message: str | None = None,
+    result_title: str | None = None,
+    result_content: str | None = None,
+) -> None:
+    answers_json = None
+    if data.answers:
+        answers_json = json.dumps([item.model_dump() for item in data.answers])
+    AiPromptLogRepository.create(
+        db,
+        AiPromptLog(
+            user_id=user_id,
+            organization_id=organization_id,
+            prompt=data.prompt,
+            category=data.category,
+            used_web_search=data.use_web_search,
+            answers_json=answers_json,
+            status=status,
+            error_message=error_message,
+            result_title=result_title,
+            result_content=result_content,
+        ),
+    )
+
+
+async def draft_for_user(db: Session, user_id: UUID, data: DraftRequest) -> DraftResponse:
     if not settings.AI_API_KEY:
         raise DetailedException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "The writing assistant isn't switched on yet.",
         )
+
+    user = UserRepository.get_by_id(db, user_id)
+    if not user.organization_id:
+        raise ForbiddenException(
+            "You must belong to an organization to use the writing assistant"
+        )
+    organization = OrganizationRepository.get_by_id(db, user.organization_id)
 
     category = CATEGORY_BY_SLUG[data.category]
     category_name = category["name"]
@@ -219,7 +263,12 @@ async def draft_for_user(user_id: UUID, data: DraftRequest) -> DraftResponse:
         if web_search:
             research_notes, research_usage = await research(RESEARCH_PROMPT, build_research_message(data))
             usage.add(research_usage)
-        message = build_user_message(category, data, research_notes)
+        message = build_user_message(
+            category,
+            data,
+            research_notes,
+            organization=organization,
+        )
         raw, draft_usage = await complete_draft(system_prompt(web_search), message)
         usage.add(draft_usage)
     except AIBusy as exc:
@@ -232,6 +281,14 @@ async def draft_for_user(user_id: UUID, data: DraftRequest) -> DraftResponse:
             started=started,
             usage=usage,
             reason=exc.reason,
+        )
+        _save_prompt_log(
+            db,
+            user_id=user_id,
+            organization_id=organization.id,
+            data=data,
+            status="failed",
+            error_message=exc.reason,
         )
         raise DetailedException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -250,6 +307,14 @@ async def draft_for_user(user_id: UUID, data: DraftRequest) -> DraftResponse:
             usage=usage,
             reason=exc.reason,
         )
+        _save_prompt_log(
+            db,
+            user_id=user_id,
+            organization_id=organization.id,
+            data=data,
+            status="failed",
+            error_message=exc.reason,
+        )
         raise failed
 
     reply_status = raw.get("status")
@@ -267,6 +332,13 @@ async def draft_for_user(user_id: UUID, data: DraftRequest) -> DraftResponse:
                 usage=usage,
                 action=f"AI asked {len(questions)} questions",
             )
+            _save_prompt_log(
+                db,
+                user_id=user_id,
+                organization_id=organization.id,
+                data=data,
+                status="questions",
+            )
             return DraftResponse(status="questions", questions=questions, remaining_today=remaining + 1)
         if reply_status not in (None, "draft"):
             raise ValueError("unknown reply status")
@@ -282,6 +354,14 @@ async def draft_for_user(user_id: UUID, data: DraftRequest) -> DraftResponse:
             usage=usage,
             reason=str(exc),
         )
+        _save_prompt_log(
+            db,
+            user_id=user_id,
+            organization_id=organization.id,
+            data=data,
+            status="failed",
+            error_message=str(exc),
+        )
         raise failed
 
     if sources:
@@ -292,6 +372,15 @@ async def draft_for_user(user_id: UUID, data: DraftRequest) -> DraftResponse:
         category_name=category_name,
         started=started,
         usage=usage,
+    )
+    _save_prompt_log(
+        db,
+        user_id=user_id,
+        organization_id=organization.id,
+        data=data,
+        status="draft",
+        result_title=title,
+        result_content=content,
     )
     return DraftResponse(
         status="draft",

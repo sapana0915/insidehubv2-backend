@@ -25,6 +25,14 @@ class OrganizationRepository:
         return db.query(Organization).filter(Organization.slug == slug).first()
 
     @staticmethod
+    def get_by_email_domain(db: Session, email_domain: str) -> Organization | None:
+        return (
+            db.query(Organization)
+            .filter(Organization.email_domain == email_domain)
+            .first()
+        )
+
+    @staticmethod
     def get_for_user(db: Session, user_id: UUID) -> Organization | None:
         """One user → at most one organization (via users.organization_id)."""
         user = (

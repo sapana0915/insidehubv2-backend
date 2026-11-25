@@ -8,6 +8,7 @@ from app.database import Base
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from app.insidehubv2_ai.models import AiPromptLog
     from app.organizations.models import Organization
 
 
@@ -51,7 +52,11 @@ class User(Base):
     )
     organization: Mapped["Organization | None"] = relationship(
         back_populates="users",
-        foreign_keys=[organization_id])
+        foreign_keys=[organization_id],
+    )
+    ai_prompt_logs: Mapped[list["AiPromptLog"]] = relationship(
+        back_populates="user",
+    )
 
     def __repr__(self):
         return f"<User {self.username}>"
